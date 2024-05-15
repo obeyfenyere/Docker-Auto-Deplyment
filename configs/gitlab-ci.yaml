@@ -1,0 +1,55 @@
+image: docker:19.03.1
+
+variables:
+  REGISTRY: 192.168.1.115:5050
+  TAG: transactions-manager:0.0.1-RELEASE
+  DEV_TAG: transactions-manager:0.0.1-SNAPSHOT
+  DOCKER_OPTS: "--insecure-registry=$REGISTRY"
+  DOCKER_HOST: "tcp://lordgaav__dind-options:2375"
+
+services:
+  - lordgaav/dind-options
+
+stages:
+  - develop
+  - deploy_test
+  - prod
+
+before_script:
+  - docker info
+
+develop:
+  stage: develop
+  before_script:
+    - docker login -u admin -p 123456\$i $REGISTRY
+  script:
+    - docker build -f Dockerfile-lab -t $REGISTRY/$DEV_TAG .
+    - docker push $REGISTRY/$DEV_TAG
+  only:
+    - develop
+
+prod:
+  stage: prod
+  before_script:
+    - docker login -u admin -p 123456\$i $REGISTRY
+  script:
+    - docker build -f Dockerfile -t $REGISTRY/$TAG .
+    - docker push $REGISTRY/$TAG
+  only:
+    - master
+    - release/0.0.1-RELEASE
+
+deploy_test:
+  stage: deploy_test
+  image: ubuntu:latest
+  before_script:
+    - apt-get update && apt-get install -y openssh-client
+  script:
+    # Set up SSH directory and key
+    - mkdir -p ~/.ssh
+    - echo "$GITLAB_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/gitlab_key
+    - chmod 600 ~/.ssh/gitlab_key
+    # Try connecting using the SSH key
+    - ssh -i ~/.ssh/gitlab_key -o StrictHostKeyChecking=no rootadmin@192.168.16.29 'cd /srv/docker/transaction-manager && ./start.sh'
+  only:
+    - develop
